@@ -3,3 +3,4 @@
 __pycache__
 Dockerfile
 temp
+.env.example
