@@ -1,4 +1,4 @@
-# Multi Ai Agent Platform
+# Garvis - Multi Ai Agent Platform
 
 > A production-minded, multi-agent AI workspace for turning a single conversation into answers, research, code, documents, presentations, and images.
 
