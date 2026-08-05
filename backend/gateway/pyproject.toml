@@ -1,0 +1,15 @@
+[project]
+name = "gateway"
+version = "1.0.0"
+description = "API gateway: proxies /api/auth, /api/chat, /api/agent, /api/billing and serves /api/me"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "httpx>=0.28",
+    "python-dotenv>=1.0",
+    "shared",
+]
+
+[tool.uv.sources]
+shared = { path = "../shared", editable = true }
