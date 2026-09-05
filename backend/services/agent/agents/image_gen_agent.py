@@ -33,7 +33,21 @@ Requirements:
 Return only the image prompt.
 User Request:{state.get("prompt")}
 """)
-        prompt = res.content.strip()
+        content = res.content
+        if isinstance(content, str):
+            prompt = content.strip()
+        elif isinstance(content, list):
+            prompt = "".join(
+                item.get("text", "")
+                if isinstance(item, dict)
+                else str(item)
+                for item in content
+            ).strip()
+        else:
+            prompt = str(content).strip()
+        print("CONTENT TYPE:", type(res.content))
+        print("CONTENT:", res.content)
+
         image_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt, safe='')}"
         async with httpx.AsyncClient(timeout=None) as client:
             image_res = await client.get(image_url)
@@ -41,7 +55,7 @@ User Request:{state.get("prompt")}
         image_buffer = image_res.content
         file_name = f"image_{int(time.time() * 1000)}.png"
         upload_to_s3(file_name, image_buffer, "image/png")
-        download_url = get_from_s3(file_name, 24 * 60 * 60)
+        download_url = get_from_s3(file_name, 10 * 60)
         return {
             **state,
             "aiResponse": f"""

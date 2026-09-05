@@ -13,7 +13,7 @@ groq = ChatGroq(
 )
 
 gemini = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-3.5-flash",
     api_key=os.environ.get("GOOGLE_API_KEY"),
 )
 

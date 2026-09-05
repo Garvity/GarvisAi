@@ -1,23 +1,24 @@
-# Build from the backend-python root:
+# Build from the backend root:
 # docker build -f services/agent/Dockerfile .
 
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:0.11.19 /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_NO_CACHE=1
+
 WORKDIR /app
 
 COPY shared ./shared
-RUN pip install -e /app/shared
-
-COPY services/agent/requirements.txt ./services/agent/
-
-WORKDIR /app/services/agent
-RUN pip install --no-cache-dir -r requirements.txt
-
-WORKDIR /app
-
 COPY services/agent ./services/agent
 
 WORKDIR /app/services/agent
+
+RUN uv sync --frozen --no-dev
+
+ENV PATH="/app/services/agent/.venv/bin:$PATH"
 
 EXPOSE 8003
 

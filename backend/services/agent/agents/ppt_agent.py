@@ -53,7 +53,7 @@ Topic:{state.get("prompt")}
             buffer,
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
-        download_url = get_from_s3(file_name, 24 * 60 * 60)
+        download_url = get_from_s3(file_name, 10 * 60)
         
         return {
             **state,

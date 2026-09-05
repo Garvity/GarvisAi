@@ -2,6 +2,7 @@ import { Mic, Paperclip, Send } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import sendMessage from "../../features/sendMessage";
+import getCurrentUser from "../../features/getCurrentUser";
 import { useDispatch } from "react-redux";
 import { createConversation } from "../../features/createConversation";
 import {
@@ -26,15 +27,17 @@ import {
   setMessages,
   addMessage,
 } from "../redux/messageSlice";
+import { setUserData } from "../redux/userSlice";
 import { useRef } from "react";
 import { X } from "lucide-react";
+
 
 function ChatInput() {
   const [value, setValue] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("Auto");
   const [selectedFile, setSelectedFile] = useState(null);
-  const [listening,setListening] = useState(false);
-  const recognitionRef=useRef(null);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
   const fileRef = useRef(null);
   const { selectedConversation } = useSelector((state) => state.conversation);
   const { isLoading } = useSelector((state) => state.message);
@@ -43,90 +46,90 @@ function ChatInput() {
   const baseTextRef = useRef("");
   const dispatch = useDispatch();
   useEffect(() => {
-  const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  if (!SpeechRecognition) return;
+    if (!SpeechRecognition) return;
 
-  const recognition = new SpeechRecognition();
+    const recognition = new SpeechRecognition();
 
-  recognition.lang = "en-US";
-  recognition.continuous = true;
-  recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
 
-  recognition.onresult = (event) => {
-  let finalTranscript = "";
-  let interimTranscript = "";
+    recognition.onresult = (event) => {
+      let finalTranscript = "";
+      let interimTranscript = "";
 
-  for (let i = event.resultIndex; i < event.results.length; i++) {
-    const transcript = event.results[i][0].transcript;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
 
-    if (event.results[i].isFinal) {
-      finalTranscript += transcript;
-    } else {
-      interimTranscript += transcript;
-    }
-  }
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
 
-  // Save confirmed speech so future dictation continues from it
-  if (finalTranscript) {
-    baseTextRef.current +=
-      (baseTextRef.current ? " " : "") + finalTranscript.trim();
-  }
+      // Save confirmed speech so future dictation continues from it
+      if (finalTranscript) {
+        baseTextRef.current +=
+          (baseTextRef.current ? " " : "") + finalTranscript.trim();
+      }
 
-  // Show confirmed + current interim speech
-  setValue(
-    baseTextRef.current +
-      (interimTranscript ? " " + interimTranscript.trim() : "")
-  );
-};
+      // Show confirmed + current interim speech
+      setValue(
+        baseTextRef.current +
+          (interimTranscript ? " " + interimTranscript.trim() : ""),
+      );
+    };
 
-  recognition.onend = () => {
-    setListening(false);
-  };
-  recognition.onerror = (event) => {
-  console.error(event.error);
-  setListening(false);
-};
+    recognition.onend = () => {
+      setListening(false);
+    };
+    recognition.onerror = (event) => {
+      console.error(event.error);
+      setListening(false);
+    };
 
-  recognitionRef.current = recognition;
+    recognitionRef.current = recognition;
 
-  return () => {
-    recognition.stop();
-  };
-}, []);
+    return () => {
+      recognition.stop();
+    };
+  }, []);
   const toggleMic = () => {
-  if (!recognitionRef.current) {
-    alert("Speech Recognition not supported in this browser.");
-    return;
-  }
+    if (!recognitionRef.current) {
+      alert("Speech Recognition not supported in this browser.");
+      return;
+    }
 
-  if (listening) {
-    recognitionRef.current.stop();
-    setListening(false);
-  } else {
-    // Save whatever is currently in the textarea
-    baseTextRef.current = value.trim();
+    if (listening) {
+      recognitionRef.current.stop();
+      setListening(false);
+    } else {
+      // Save whatever is currently in the textarea
+      baseTextRef.current = value.trim();
 
-    try {
-    recognitionRef.current.start();
-    setListening(true);
-} catch (err) {
-    console.error(err);
-}
-  }
-};
+      try {
+        recognitionRef.current.start();
+        setListening(true);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
   //const handleSendMessage = async () => { let conversation = selectedConversation; dispatch(setIsLoading(true)); if (!conversation) { dispatch(setMessages([])); const conv = await createConversation(); dispatch(setSelectedConversation(conv)); dispatch(addConversation(conv)); conversation = conv; } if (conversation.title == "New Chat") { await updateConversation({ id: conversation._id, title: value.trim() }); dispatch( setConvTitle({ conversationId: conversation?._id, title: value.slice(0, 40), }), ); } console.log("selectedFile", selectedFile); const formData = new FormData(); formData.append("prompt", value.trim()); formData.append("conversationId", conversation?._id); formData.append("agent", selectedAgent.toLowerCase()); if (selectedFile) { formData.append("file", selectedFile); } dispatch(addMessage({ role: "user", content: value.trim() })); setValue(""); const data = await sendMessage(formData); dispatch(setIsLoading(true)); setSelectedFile(null); dispatch(setArtifacts(data?.artifacts || [])); dispatch( addMessage({ role: "assistant", content: data?.answer, images: data?.images, }), ); console.log("sendMessage data", data); };
   const handleSendMessage = async () => {
     if (listening && recognitionRef.current) {
-    recognitionRef.current.stop();
-    setListening(false);
-  }
+      recognitionRef.current.stop();
+      setListening(false);
+    }
     if (!value.trim() && !selectedFile) return;
     let conversation = selectedConversation;
     if (sendingRef.current) return;
 
-  sendingRef.current = true;
+    sendingRef.current = true;
     try {
       dispatch(setIsLoading(true));
 
@@ -183,9 +186,8 @@ function ChatInput() {
       baseTextRef.current = "";
       setSelectedFile(null);
       if (fileRef.current) {
-  fileRef.current.value = null;
-}
-      
+        fileRef.current.value = null;
+      }
 
       // Then send the request
       const data = await sendMessage(formData);
@@ -199,6 +201,14 @@ function ChatInput() {
           images: data?.images,
         }),
       );
+
+      // Credit deductions update the server-side session. Refresh the user in
+      // Redux so every balance display receives the authoritative new value.
+      const currentUser = await getCurrentUser();
+      if (currentUser) {
+        dispatch(setUserData(currentUser));
+      }
+
       console.log("sendMessage data", data);
     } catch (err) {
       console.error(err);
@@ -207,22 +217,20 @@ function ChatInput() {
       dispatch(setIsLoading(false));
     }
   };
-  
 
-  
-useEffect(() => {
-  if (!selectedFile) {
-    setPreview(null);
-    return;
-  }
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreview(null);
+      return;
+    }
 
-  const objectUrl = URL.createObjectURL(selectedFile);
-  setPreview(objectUrl);
+    const objectUrl = URL.createObjectURL(selectedFile);
+    setPreview(objectUrl);
 
-  return () => {
-    URL.revokeObjectURL(objectUrl);
-  };
-}, [selectedFile]);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedFile]);
 
   const agents = [
     {
@@ -360,12 +368,13 @@ useEffect(() => {
               <Paperclip size={16} />
             </button>
             <button
-            onClick={toggleMic}
-            disabled={isLoading}
-            className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 cursor-pointer
+              onClick={toggleMic}
+              disabled={isLoading}
+              className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 cursor-pointer
             ${listening ? "bg-red-500 text-white hover:bg-red-700" : "text-slate-600 hover:bg-white/[0.05]"}
-            `}>
-            {listening ? <MicOff size={16} /> : <Mic size={16} />} 
+            `}
+            >
+              {listening ? <MicOff size={16} /> : <Mic size={16} />}
             </button>
           </div>
 

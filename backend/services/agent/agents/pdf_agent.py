@@ -43,7 +43,7 @@ Topic:{state.get("prompt")}
 
         file_name = f"pdf-{int(time.time() * 1000)}.pdf"
         upload_to_s3(file_name,pdf_buffer, "application/pdf")
-        download_url = get_from_s3(file_name, 24 * 60 * 60)
+        download_url = get_from_s3(file_name, 10 * 60)
         response = {
             **state,
             "aiResponse": f"""
