@@ -70,8 +70,8 @@ async def login(request: Request):
             "session",
             session_id,
             httponly=True,
-            secure=False,
-            samesite="strict",
+            secure=True,
+            samesite="none",
             max_age=60 * 60 * 24 * 7,
         )
         return response
