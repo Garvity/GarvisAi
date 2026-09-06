@@ -1,4 +1,4 @@
-# Garvis - Multi Ai Agent Platform
+# GarvisAI — Multi-Agent AI Platform
 
 > A production-minded, multi-agent AI workspace for turning a single conversation into answers, research, code, documents, presentations, and images.
 
@@ -10,6 +10,16 @@
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
 GarvisAI is a full-stack AI product built around a clear product idea: users should be able to ask naturally, choose a specialist when they want control, and receive useful, durable output in the same workspace. It combines a polished React interface with a FastAPI microservice backend and a LangGraph-powered agent router.
+
+## Live deployment
+
+| Surface | Production endpoint | Hosting |
+| --- | --- | --- |
+| Web application | [garvis-ai-eta.vercel.app](https://garvis-ai-eta.vercel.app/) | Vercel |
+| Public API | [api.garvisai.abrdns.com](https://api.garvisai.abrdns.com) | AWS Application Load Balancer + ACM |
+| AWS load balancer | `garvisai-lb-1562628391.ap-south-1.elb.amazonaws.com` | AWS `ap-south-1` |
+
+The custom API subdomain is the canonical backend endpoint. It provides HTTPS through an AWS Certificate Manager certificate while the AWS-generated ALB hostname remains the underlying infrastructure endpoint.
 
 ## Why this project stands out
 
@@ -59,11 +69,105 @@ flowchart LR
 
 ### Request lifecycle
 
-1. The React client authenticates with Firebase and exchanges the Firebase ID token for a secure, HTTP-only session cookie.
+1. The React client authenticates with Firebase and exchanges the Firebase ID token for an HTTP-only session cookie.
 2. The gateway validates that session in Redis, injects the authenticated user ID, and forwards the request to the appropriate service.
 3. The agent service routes the request to the right specialist. File type takes priority: PDFs go to the RAG pipeline and images go to the vision analyser.
 4. The service applies rate limits and credits, persists both sides of the conversation, and caches the latest context in Redis for fast follow-up responses.
 5. Rich results—code artifacts, generated files, images, and Markdown—return to the client for display in the conversation workspace.
+
+## Production deployment
+
+GarvisAI is deployed as a containerised microservice platform on AWS, with the React frontend deployed independently on Vercel. The public internet can reach only the frontend and the Application Load Balancer; application services and Redis remain behind security-group boundaries inside the VPC.
+
+### AWS backend topology
+
+```mermaid
+flowchart LR
+    USER["User browser"] -->|"HTTPS"| VERCEL["Vercel frontend"]
+    VERCEL -->|"HTTPS API requests"| DNS["ClouDNS<br/>api.garvisai.abrdns.com"]
+
+    subgraph AWS["AWS VPC · ap-south-1"]
+        direction LR
+        DNS --> ALB["Application Load Balancer<br/>public subnets"]
+        ACM["AWS Certificate Manager"] -. "TLS certificate" .-> ALB
+
+        subgraph ECS["ECS application services"]
+            GW["Gateway ECS service<br/>:8000"]
+            GW --> AUTH["Auth :8001"]
+            GW --> CHAT["Chat :8002"]
+            GW --> AGENT["Agent :8003"]
+            GW --> BILLING["Billing :8004"]
+        end
+
+        ALB -->|"Gateway target group"| GW
+        AUTH -->|"Redis :6379"| CACHE[("ElastiCache<br/>Redis OSS")]
+        AGENT -->|"Memory + rate limits"| CACHE
+    end
+```
+
+The request path is deliberately narrow:
+
+1. **DNS and TLS:** the ClouDNS-managed `api.garvisai.abrdns.com` subdomain resolves to the ALB. AWS Certificate Manager supplies the certificate used by the HTTPS listener, with HTTP traffic upgraded to HTTPS.
+2. **Load balancing:** the internet-facing ALB spans the public-facing VPC subnets and forwards API traffic through the gateway target group. Target-group health checks allow ECS to replace tasks without exposing fixed container addresses.
+3. **Gateway boundary:** only the gateway is registered behind the public load balancer. It validates Redis-backed sessions and routes `/api/auth`, `/api/chat`, `/api/agent`, and `/api/billing` traffic to the matching internal ECS service.
+4. **Service isolation:** gateway, auth, chat, agent, and billing each have an independent Docker image, ECR repository, ECS task definition, and ECS service. This allows services to be deployed and scaled independently.
+5. **Managed cache:** Amazon ElastiCache for Redis OSS stores sessions, recent agent memory, and rate-limit counters without making Redis publicly reachable.
+
+### Network security model
+
+| Security group | Inbound access | Purpose |
+| --- | --- | --- |
+| ALB security group | Public HTTPS on port `443` and the HTTP listener used for HTTPS redirection | Exposes one controlled entry point. |
+| ECS security group | Gateway traffic from the ALB security group; service-to-service traffic required by the gateway | Prevents direct public access to ECS tasks. |
+| ElastiCache security group | Redis port `6379` from the ECS security group only | Restricts session and cache access to backend workloads. |
+
+Public subnets are used for the ALB, while ECS workloads and ElastiCache run in non-public application/cache subnets. Routing and security-group references keep the effective flow constrained to:
+
+```text
+Internet → ALB security group → ALB → gateway target group
+         → ECS security group → gateway → internal microservices
+         → ElastiCache security group → Redis OSS
+```
+
+### Container delivery with ECR and ECS
+
+The backend is split into five independently deployable units:
+
+| Deployable | ECR image/repository | ECS workload |
+| --- | --- | --- |
+| API gateway | `gateway:latest` | Gateway task definition and service |
+| Authentication | `auth-service:latest` | Auth task definition and service |
+| Conversations | `chat-service:latest` | Chat task definition and service |
+| Agent orchestration | `agent-service:latest` | Agent task definition and service |
+| Payments | `billing-service:latest` | Billing task definition and service |
+
+Every backend Dockerfile uses `uv` with its committed lockfile for reproducible dependency installation. Runtime configuration and credentials are supplied to the relevant ECS task definition rather than baked into an image.
+
+### Automated CI/CD
+
+The [deployment workflow](.github/workflows/deploy.yml) runs on every push to `main`:
+
+```mermaid
+flowchart LR
+    PUSH["Push to main"] --> BUILD["Build 5 Docker images"]
+    BUILD --> ECR["Tag and push to Amazon ECR"]
+    ECR --> ECS["Force new deployment<br/>for 5 ECS services"]
+    ECS --> INSTALL["npm ci · Node.js 22"]
+    INSTALL --> VBUILD["Vercel production build"]
+    VBUILD --> RELEASE["Vercel production deploy"]
+```
+
+The backend job authenticates to AWS, publishes all five images, and triggers rolling ECS deployments. The frontend job declares `needs: deploy-backend`, so Vercel is promoted only after the backend deployment job succeeds. It pulls the production Vercel configuration, creates a prebuilt production artifact, and deploys that exact artifact.
+
+The workflow reads the following values from GitHub Actions secrets:
+
+| Area | GitHub secrets |
+| --- | --- |
+| AWS authentication and registry | `AWS_REGION`, `AWS_ACCOUNT_ID`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
+| ECS deployment targets | `ECS_CLUSTER`, `GATEWAY_SERVICE`, `AUTH_SERVICE`, `CHAT_SERVICE`, `AGENT_SERVICE`, `BILLING_SERVICE` |
+| Vercel production deployment | `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `VERCEL_TOKEN` |
+
+No secret values are committed to the repository or printed in this documentation.
 
 ## Tech stack
 
@@ -238,9 +342,9 @@ The UI can explicitly select an agent, or use **Auto** to delegate intent select
 | `pdfRag` | Retrieval-grounded answer from an uploaded PDF | Subject to agent service limits |
 | `imageAnalyzer` | Analysis and text extraction from an uploaded image | Subject to agent service limits |
 
-## Production considerations
+## Operational safeguards
 
-This repository includes Dockerfiles for the gateway and each service. Build from the `backend/` directory so the image can include `shared/`:
+Each backend component has an independent `uv`-based Dockerfile. Build from the `backend/` directory so services that declare the local `shared` package can include it:
 
 ```bash
 cd backend
@@ -248,7 +352,7 @@ docker build -f gateway/Dockerfile .
 docker build -f services/agent/Dockerfile .
 ```
 
-Before a public deployment, configure a production MongoDB/Redis provider, an HTTPS origin, and environment-specific CORS settings. The auth cookie is currently configured for local development (`secure=False`); set it to secure cookies behind HTTPS in production. Keep payment verification server-side, rotate credentials regularly, and use least-privilege IAM credentials for the S3 bucket.
+Production runtime values belong in ECS task-definition secrets or another managed secret store, never in images. Application-layer CORS and cookie settings must stay aligned with the HTTPS frontend/API domains; secure cookies should be enabled behind the ALB. Payment verification remains server-side, and AWS/Firebase/provider credentials should be rotated regularly with least-privilege IAM permissions.
 
 ## Product decisions worth noting
 
