@@ -168,6 +168,7 @@ jobs:
         run: |
           vercel pull \
             --yes \
+            --debug \
             --environment=production \
             --token=${{ secrets.VERCEL_TOKEN }}
 
