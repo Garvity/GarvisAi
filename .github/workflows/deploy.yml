@@ -138,7 +138,7 @@ jobs:
           --force-new-deployment
 
 
-      deploy-frontend:
+  deploy-frontend:
     needs: deploy-backend
     runs-on: ubuntu-latest
     env:
