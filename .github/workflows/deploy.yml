@@ -30,7 +30,7 @@ jobs:
       - name: Build Gateway Docker image
         run: |
           docker build \
-          --platform linux/amd64 \
+          --platform linux/arm64 \
           -f backend/gateway/Dockerfile \
           -t gateway backend
 
@@ -46,7 +46,7 @@ jobs:
       - name: Build Auth-Service Docker image
         run: |
           docker build \
-          --platform linux/amd64 \
+          --platform linux/arm64 \
           -f backend/services/auth/Dockerfile \
           -t auth-service backend
 
@@ -62,7 +62,7 @@ jobs:
       - name: Build Chat-Service Docker image
         run: |
           docker build \
-          --platform linux/amd64 \
+          --platform linux/arm64 \
           -f backend/services/chat/Dockerfile \
           -t chat-service backend
 
@@ -78,7 +78,7 @@ jobs:
       - name: Build Agent-Service Docker image
         run: |
           docker build \
-          --platform linux/amd64 \
+          --platform linux/arm64 \
           -f backend/services/agent/Dockerfile \
           -t agent-service backend
 
@@ -94,7 +94,7 @@ jobs:
       - name: Build Billing-Service Docker image
         run: |
           docker build \
-          --platform linux/amd64 \
+          --platform linux/arm64 \
           -f backend/services/billing/Dockerfile \
           -t billing-service backend
 
