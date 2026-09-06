@@ -1,0 +1,187 @@
+name: garvis ai deployment
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Gateway Docker image
+        run: |
+          docker build \
+          -f backend/gateway/Dockerfile \
+          -t gateway backend
+
+      - name: Tag Gateway Docker image
+        run: |
+          docker tag gateway:latest ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/gateway:latest
+
+      - name: Push Gateway Docker image to Amazon ECR
+        run: |
+          docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/gateway:latest
+      
+      
+      - name: Build Auth-Service Docker image
+        run: |
+          docker build \
+          -f backend/services/auth/Dockerfile \
+          -t auth-service backend
+
+      - name: Tag Auth-Service Docker image
+        run: |
+          docker tag auth-service:latest ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/auth-service:latest
+
+      - name: Push Auth-Service Docker image to Amazon ECR
+        run: |
+          docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/auth-service:latest
+
+
+      - name: Build Chat-Service Docker image
+        run: |
+          docker build \
+          -f backend/services/chat/Dockerfile \
+          -t chat-service backend
+
+      - name: Tag Chat-Service Docker image
+        run: |
+          docker tag chat-service:latest ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/chat-service:latest
+
+      - name: Push Chat-Service Docker image to Amazon ECR
+        run: |
+          docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/chat-service:latest
+
+
+      - name: Build Agent-Service Docker image
+        run: |
+          docker build \
+          -f backend/services/agent/Dockerfile \
+          -t agent-service backend
+
+      - name: Tag Agent-Service Docker image
+        run: |
+          docker tag agent-service:latest ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/agent-service:latest
+
+      - name: Push Agent-Service Docker image to Amazon ECR
+        run: |
+          docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/agent-service:latest
+
+
+      - name: Build Billing-Service Docker image
+        run: |
+          docker build \
+          -f backend/services/billing/Dockerfile \
+          -t billing-service backend
+
+      - name: Tag Billing-Service Docker image
+        run: |
+          docker tag billing-service:latest ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/billing-service:latest
+
+      - name: Push Billing-Service Docker image to Amazon ECR
+        run: |
+          docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/billing-service:latest
+
+
+      - name: Deploy Gateway
+        run: |
+          aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.GATEWAY_SERVICE }} \
+          --force-new-deployment
+
+      - name: Deploy Auth-Service
+        run: |
+          aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.AUTH_SERVICE }} \
+          --force-new-deployment
+      
+      - name: Deploy Chat-Service
+        run: |
+          aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.CHAT_SERVICE }} \
+          --force-new-deployment
+
+      - name: Deploy Agent-Service
+        run: |
+          aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.AGENT_SERVICE }} \
+          --force-new-deployment
+
+      - name: Deploy Billing-Service
+        run: |
+          aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.BILLING_SERVICE }} \
+          --force-new-deployment
+
+
+    deploy-frontend:
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel
+
+      - name: Pull Vercel configuration
+        working-directory: frontend
+        run: |
+          vercel pull \
+            --yes \
+            --environment=production \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          vercel build \
+            --prod \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy frontend
+        working-directory: frontend
+        run: |
+          vercel deploy \
+            --prebuilt \
+            --prod \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+
+
